@@ -1,36 +1,52 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Carousel,
-  Button,
-  Form
-} from 'react-bootstrap';
+import { Spinner } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import '../App.css';
+import SearchBar from './SearchBar';
+import CurrentWeather from './CurrentWeather';
+import Forecast from './Forecast';
+import CityTabs from './CityTabs'; 
+import { useGeolocated } from 'react-geolocated';
 
 const Weather = () => {
   const [forecastData, setForecastData] = useState(null);
   const [currentWeather, setCurrentWeather] = useState(null);
-  const [city, setCity] = useState('Lyon');                                                                             // Ville par défaut
+  const [cities, setCities] = useState(['Lyon']);
+  const [activeCity, setActiveCity] = useState('Lyon');
   const [latLon, setLatLon] = useState({ lat: null, lon: null });
+  const [isLoading, setIsLoading] = useState(false);
   const API_KEY = '13c963555badbceeef2991fffe14082a'; 
 
+  
+  const { coords, isGeolocationAvailable, isGeolocationEnabled, error } = useGeolocated({
+    positionOptions: {
+      enableHighAccuracy: true,
+    },
+    userDecisionTimeout: 5000,
+  });
+
+  useEffect(() => {
+    if (coords) {
+      setLatLon({ lat: coords.latitude, lon: coords.longitude });
+    }
+  }, [coords]);
+
   const fetchLatLon = async (cityName) => {
+    setIsLoading(true);
     if (!cityName) {
       console.error('City name is empty');
+      setIsLoading(false);
       return;
     }
 
-    console.log(`Fetching lat/lon for city: ${cityName}`);
     try {
       const response = await fetch(
-         `https://api.openweathermap.org/geo/1.0/direct?q=${cityName}&limit=1&appid=${API_KEY}`
+        `https://api.openweathermap.org/geo/1.0/direct?q=${cityName}&limit=1&appid=${API_KEY}`
       );
       const data = await response.json();
-      console.log(`Data from geocoding API:`, data);
 
       if (data.length > 0) {
         setLatLon({ lat: data[0].lat, lon: data[0].lon });
-        console.log(`Latitude`, data[0].lat, `Longitude`, data[0].lon);
       } else {
         console.error('City not found');
       }
@@ -40,7 +56,7 @@ const Weather = () => {
   };
 
   const fetchCurrentWeather = async (lat, lon) => {
-    if(!lat || !lon) return;
+    if (!lat || !lon) return;
     try {
       const response = await fetch(
         `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&units=metric&appid=${API_KEY}&lang=fr`
@@ -48,9 +64,9 @@ const Weather = () => {
       const data = await response.json();
       setCurrentWeather(data);
     } catch (error) {
-      console.error('Erreur lors de la récuépration des données météo actuelles', error);
+      console.error('Erreur lors de la récupération des données météo actuelles', error);
     }
-  }
+  };
 
   useEffect(() => {
     const fetchForecastData = async () => {
@@ -60,11 +76,13 @@ const Weather = () => {
             `https://api.openweathermap.org/data/2.5/forecast?lat=${latLon.lat}&lon=${latLon.lon}&units=metric&appid=${API_KEY}&lang=fr`
           );
           const data = await response.json();
-          setForecastData(data); 
+          setForecastData(data);
           fetchCurrentWeather(latLon.lat, latLon.lon);
         } catch (error) {
           console.error('Erreur lors de la récupération des données météo', error);
-        }   
+        } finally {
+          setIsLoading(false);
+        }
       }
     };
 
@@ -72,15 +90,18 @@ const Weather = () => {
   }, [latLon]);
 
   const handleSearch = () => {
-    if (city.trim() !== '') {
-      fetchLatLon(city);
+    if (activeCity.trim() !== '') {
+      if (!cities.includes(activeCity)) {
+        setCities([...cities, activeCity]);
+      }
+      fetchLatLon(activeCity);
     } else {
       console.error('City input is empty');
     }
   };
 
   const handleKeyDown = (event) => {
-    if(event.key === 'Enter') {
+    if (event.key === 'Enter') {
       handleSearch();
     }
   };
@@ -90,7 +111,7 @@ const Weather = () => {
 
     return forecastData.list.reduce((acc, forecast) => {
       const date = new Date(forecast.dt_txt);
-      const dateKey = date.toISOString().split('T')[0]; // Extrait la date au format YYYY-MM-DD
+      const dateKey = date.toISOString().split('T')[0];
 
       if (!acc[dateKey]) {
         acc[dateKey] = [];
@@ -100,64 +121,68 @@ const Weather = () => {
     }, {});
   };
 
+  const handleSelectCity = (city) => {
+    setActiveCity(city);
+    fetchLatLon(city);
+  };
+
+  const handleRemoveCity = (city) => {
+    setCities(cities.filter(c => c !== city));
+    if (activeCity === city && cities.length > 1) {
+      const newActiveCity = cities[0] === city ? cities[1] : cities[0]; 
+      setActiveCity(newActiveCity);
+      fetchLatLon(newActiveCity);
+    }
+  };
+
   const groupedForecasts = groupForecastByDay();
+
+  if (!isGeolocationAvailable) {
+    return <p>Votre navigateur ne supporte pas la géolocalisation.</p>;
+  }
+
+  if (!isGeolocationEnabled) {
+    return <p>La géolocalisation est désactivée. Veuillez l'activer dans les paramètres de votre navigateur.</p>;
+  }
+
+  if (error) {
+    return <p>Erreur de géolocalisation : {error.message}</p>;
+  }
 
   return (
     <div>
       <h1>Prévisions météo sur 5 jours</h1>
 
-      <Form.Control 
-        size="lg"
-        type="text"
-        placeholder="Entrez une ville"
-        value={city}  
-        onChange={(e) => setCity(e.target.value)}
-        onKeyDown={handleKeyDown} 
+      <SearchBar
+        city={activeCity}
+        setCity={setActiveCity}
+        handleSearch={handleSearch}
+        handleKeyDown={handleKeyDown}
       />
-      <Button variant="primary" size="lg" onClick={handleSearch}>Rechercher</Button>
 
-      {/* CURRENT WEATHER ------------------------------------------------------------------- */}
+      <CityTabs 
+        cities={cities} 
+        activeCity={activeCity} 
+        handleSelectCity={handleSelectCity} 
+        handleRemoveCity={handleRemoveCity} 
+      />
 
-      {currentWeather && (
-        <div className="current-weather">
-          <h2>Météo actuelle à {city}</h2>
-          <p>Température: {currentWeather.main.temp}°C</p>
-          <p>Description: {currentWeather.weather[0].description}</p>
-          <img
-            src={`http://openweathermap.org/img/wn/${currentWeather.weather[0].icon}@2x.png`}
-            alt="Weather icon"
-          />
+      {isLoading ? (
+        <div className="loader-container">
+          <Spinner animation="border" variant="primary" />
         </div>
-      )}
-
-      {/* 5 DAYS WEATHER ------------------------------------------------------------------- */}
-
-      {Object.keys(groupedForecasts).length > 0 ? (
-        <div>
-            <h2>Prévision pour {city}</h2>
-            <Carousel>
-              <div className="forecast-container">
-                {Object.entries(groupedForecasts).map(([date, forecasts]) => (
-                    <div key={date} className="forecast-day">
-                        <h3>{new Date(date).toLocaleDateString('fr-FR', { weekday: 'long' })}</h3>
-                        {forecasts.map((forecast, index) => (
-                        <div key={index} className="forecast-time">
-                          <p>{new Date(forecast.dt_txt).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
-                          <p>Température: {forecast.main.temp}°C</p>
-                          <p>Description: {forecast.weather[0].description}</p>
-                          <img
-                            src={`http://openweathermap.org/img/wn/${forecast.weather[0].icon}@2x.png`}
-                            alt="Weather icon"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                ))}
-              </div>
-            </Carousel>
-          </div>
       ) : (
-        <p>Chargement des données météo...</p>
+        <>
+          {currentWeather && (
+            <CurrentWeather city={activeCity} currentWeather={currentWeather} />
+          )}
+
+          {Object.keys(groupedForecasts).length > 0 ? (
+            <Forecast groupedForecasts={groupedForecasts} />
+          ) : (
+            !isLoading && <p>Chargement des données météo...</p>
+          )}
+        </>
       )}
     </div>
   );
