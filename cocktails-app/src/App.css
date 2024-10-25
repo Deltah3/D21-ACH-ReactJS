@@ -14,6 +14,10 @@ main {
   padding: 20vh;
 }
 
+a:hover {
+  opacity: 50%;
+}
+
 li {
   list-style: none;
 }
@@ -28,4 +32,38 @@ li {
 
 .card.rounded-card {
   border-radius: 250px 250px 30px 30px;
+}
+
+.card img {
+  margin-bottom: 20px;
+}
+
+.card-title {
+  margin-bottom: 20px;
+}
+
+.form-control {
+  margin-bottom: 20px;
+}
+
+.list-group .list-group-item {
+  background-color: transparent;
+}
+
+.list-group-item a {
+  color: white;
+  text-decoration: none;
+}
+
+.cocktail-details {
+  overflow: hidden; 
+  margin-bottom: 20px; 
+}
+
+.cocktail-image {
+  margin-bottom: 20px;
+}
+
+.cocktail-info {
+  padding: 20px;
 }
